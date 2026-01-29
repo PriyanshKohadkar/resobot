@@ -64,8 +64,8 @@ async def on_message(message):
   if message.mention_everyone:
     return
   else:
-    return #if client.user.mentioned_in(message):
-      #await message.channel.send(f"I am here to help you!, {message.author.mention}")
+       if client.user.mentioned_in(message):
+          await message.channel.send(f"I am here to help you!, {message.author.mention}")
   msg = message.content
 
   #if message.content.lower().startswith('hello'):
@@ -149,4 +149,5 @@ async def on_message(message):
 
 #keep_alive()
 client.run(TOKEN)   
+
 
