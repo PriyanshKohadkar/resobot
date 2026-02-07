@@ -53,7 +53,7 @@ def delete_encouragement(index):
 
 @client.event
 async def on_ready():
-  await client.change_presence(status=discord.Status.online, activity=discord.Game("$Ghelp"))
+  await client.change_presence(status=discord.Status.dnd, activity=discord.Game("Pressure of a scorer"))
   print('we have logged in as {0.user}'.format(client))
 
 
@@ -149,5 +149,6 @@ async def on_message(message):
 
 #keep_alive()
 client.run(TOKEN)   
+
 
 
