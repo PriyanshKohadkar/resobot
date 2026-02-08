@@ -1,4 +1,80 @@
-'''if message.content.lower().startswith("umai"):
+'''import os 
+import discord
+from discord.ext import commands
+from discord import app_commands 
+from dotenv import load_dotenv
+import random
+
+from keep_alive import keep_alive
+keep_alive()
+
+load_dotenv()
+TOKEN = os.getenv("DISCORD_TOKEN")
+  
+client = discord.Client(intents=discord.Intents.all(), case_insenstive=True)
+birthday_greets = ["hbd", "many many","happy birthday", "happy","cheers","returns"]
+solve = ""
+f_words_no = [ "fa", "fi", "fai","fla","fu","freak", "fell","func" "fuc", "fac", "facebook", "fs", "fd", "fg", "fh", "fj", "fl", "fm", "fn", "fb", "fv", "fc","fx", "fz", "fq", "ff", "fw", "fe", "fr", "ft", "fy", "fu", "fi", "fo", "fp", "fap","flap", "face", "fair","fuck","facts","fax","fk","fix", "fellow","fun", "function", "freaking", "wtf", "ofc", "of", "off", "if", "ig"]
+pay_respects = ["f", "respects"]
+birthday_greets_response = ["https://tenor.com/view/nico-yazawa-love-live-happy-birthday-gif-9241240", "https://tenor.com/view/happy-birthday-pokemon-dance-pikachu-gif-17058590", "https://tenor.com/view/naruto-shippuden-madara-uchiha-gif-5321987","https://tenor.com/view/fairy-tail-happy-birthday-twerk-virgo-booty-shake-gif-16086842", "https://tenor.com/view/naruto-naruto-chunin-exams-chunin-exams-dance-gif-13984229"]
+murukh = ["idiot", "baka", "bakka", "noob", "lmao noob", "murukh"]
+murukh_response = ["https://tenor.com/view/baka-anime-gif-12908346", "https://tenor.com/view/tobirama-baka-gif-18220803","https://tenor.com/view/sasuke-naruto-anime-mad-baka-gif-17737654"]
+friends_words = ["besto friendo", "best friend", "true friend", "truu friend","you are my friend", "my besto friendo", "my best friend", "i am your friend",]
+sad_words = ["sad", "depressed", "unhappy", "sed", "angry", "depressing", "miserable", "fucked up",]
+starter_encouragements = [
+"cheer up!",
+"hang in there",
+"you are a great person!",
+"don't forget you are a sigma male!"
+]
+pydro_acc = "<@804358711136747551>"
+malhar_acc = "<@926561667289063424>"
+if "responding" not in db.keys():
+  db["responding"] = True
+
+def get_quote():
+  response = requests.get("https://zenquotes.io/api/random")
+  json_data = json.loads(response.text)
+  quote = json_data[0]['q'] + " -" + json_data[0]['a']
+  return(quote)
+def update_encouragements(encouraging_message):
+  if "encouragements" in db.keys():
+    encouragements = db["encouragements"]  
+    encouragements.append(encouraging_message)
+    db["encouragements"] = encouragements
+  else:
+    db["encouragements"] = [encouraging_message]
+
+def delete_encouragement(index):
+  encouragements = db["encouragements"]
+  if len(encouragements) > index:
+    del encouragements[index]
+
+
+@client.event
+async def on_ready():
+  await client.change_presence(status=discord.Status.do_not_disturb, activity=discord.Game("Pressure of a scorer"))
+  print('we have logged in as {0.user}'.format(client))
+
+
+@client.event
+async def on_message(message):
+  if message.author == client.user:
+    return
+  if message.mention_everyone:
+    return
+  else:
+       if client.user.mentioned_in(message):
+          await message.channel.send(f"I am here to help you!, {message.author.mention}")
+  msg = message.content
+
+  #if message.content.lower().startswith('hello'):
+   # await message.channel.send('hello! I am here to help you!')#
+  if message.content.lower().startswith('hindi'):
+    return
+  if message.content.lower().startswith('hi'):
+    await message.channel.send('whatsup!')
+  if message.content.lower().startswith("umai"):
     await message.channel.send('Umai!')
 
   if message.content.lower().startswith("thanks @Pythbot"):
@@ -39,6 +115,10 @@
     await message.channel.send('https://tenor.com/view/doctor-strange-marvel-simple-spell-unbreakable-gif-14530077')
   if message.content.lower().startswith('ohh yeah'):
     await message.channel.send('https://tenor.com/view/oh-yeah-gif-24167454')  
+  if any(word in msg.lower() for word in friends_words):
+    await message.channel.send('https://tenor.com/view/my-besto-friendo-jujutsu-kaisen-zorothex-gif-23553828')
+  if any(word in msg.lower() for word in murukh):
+      await message.channel.send(random.choice(murukh_response))  
   if message.content.lower().startswith('yes!'):
     await message.channel.send('https://tenor.com/view/jojo-anime-yes-yes-yes-yeah-its-a-yes-gif-17161748') 
   if message.content.lower().startswith('arigato'):
@@ -58,4 +138,20 @@
   if message.content.lower().startswith('shinee'):
     await message.channel.send("https://tenor.com/view/naruto-from-behind-gif-13373335") 
   if message.content.lower().startswith('jod'):
-    await message.channel.send("https://te'''
+    await message.channel.send("https://tenor.com/view/tbone-jod-tbone-jod-raka-rakazone-gif-21986927")
+  if any(word in msg.lower() for word in f_words_no):
+    return
+  elif any(word in msg.lower() for word in pay_respects):
+    await message.channel.send ("https://tenor.com/view/pay-respects-press-f-call-of-duty-respect-press-x-gif-22309724")
+        
+
+
+
+#keep_alive()
+client.run(TOKEN)   
+
+
+
+
+
+'''
