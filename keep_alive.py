@@ -3,7 +3,7 @@ from flask import Flask
 from threading import Thread
 
 app = Flask('')
-port = int(os.environ.get('PORT')
+port = int(os.environ.get('PORT'))
 @app.route('/')
 def home():
     return "Hello. I am alive!"
@@ -15,5 +15,6 @@ def keep_alive():
     t = Thread(target=run)
 
     t.start()
+
 
 
