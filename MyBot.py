@@ -16,7 +16,18 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="?", intents=intents)
 
 # ---------- MongoDB ----------
-mongo = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+mongo = MongoClient(
+    MONGO_URI,
+    serverSelectionTimeoutMS=5000,
+    tls=True,
+    tlsAllowInvalidCertificates=True
+)
+try:
+    mongo.server_info()
+    print("MongoDB connected successfully")
+except Exception as e:
+    print("MongoDB connection failed:", e)
+
 db = mongo["gif_bot"]
 collection = db["gifs"]
 
@@ -159,4 +170,5 @@ async def on_message(message):
 bot.run(TOKEN)
 
 #this is the new code 
+
 
