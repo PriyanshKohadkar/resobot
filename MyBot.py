@@ -7,6 +7,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from keep_alive import keep_alive
+keep_alive()
+
 TOKEN = os.getenv("DISCORD_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
 
@@ -170,5 +173,6 @@ async def on_message(message):
 bot.run(TOKEN)
 
 #this is the new code 
+
 
 
