@@ -1,6 +1,7 @@
 import os
 from flask import Flask
 from threading import Thread
+from MyBot import bot
 
 app = Flask('')
 port = int(os.environ.get('PORT'))
@@ -15,6 +16,7 @@ def keep_alive():
     t = Thread(target=run)
 
     t.start()
+
 
 
 
