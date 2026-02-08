@@ -1,10 +1,10 @@
 import os
 from flask import Flask
 from threading import Thread
-from MyBot import bot
+#from MyBot import bot
 
 app = Flask('')
-port = int(os.environ.get('PORT'))
+port = int(os.environ.get('PORT',5000))
 @app.route('/')
 def home():
     return "Hello. I am alive!"
@@ -16,6 +16,7 @@ def keep_alive():
     t = Thread(target=run)
 
     t.start()
+
 
 
 
