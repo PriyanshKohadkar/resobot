@@ -228,13 +228,11 @@ async def on_message(message):
             await sent.delete()
             break
 
-    if bot.user.mentioned_in(message):
-        await message.channel.send(f"I am here to help you!, {message.author.mention}")
-
     if message.content.lower() == "hi":
         await message.channel.send("whatsup!")
 
     await bot.process_commands(message)
 
 asyncio.run(main())
+
 
