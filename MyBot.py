@@ -53,7 +53,7 @@ async def on_ready():
     await bot.tree.sync()  # global sync
     await bot.change_presence(
         status=discord.Status.do_not_disturb,
-        activity=discord.Game("Pressure of a scorer")
+        activity=discord.Game("Recommending Peak Movies🔥")
     )
     print(f"Logged in as {bot.user}")
     print("✅ Slash commands synced")
@@ -234,5 +234,6 @@ async def on_message(message):
     await bot.process_commands(message)
 
 asyncio.run(main())
+
 
 
