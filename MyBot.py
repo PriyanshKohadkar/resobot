@@ -58,6 +58,12 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
     print("✅ Slash commands synced")
 
+async def main():
+    async with bot:
+        await bot.load_extension("movies")  # 👈 loads movies.py
+        await bot.start(TOKEN)
+        print("movies.py enabled")
+
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
@@ -230,4 +236,5 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-bot.run(TOKEN)
+asyncio.run(main())
+
