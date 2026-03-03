@@ -204,11 +204,23 @@ async def giftime(interaction: discord.Interaction, seconds: int):
     )
     await interaction.response.send_message(f"⏱️ GIF delete time set to **{seconds}s**.", ephemeral=True)
 
+#---------AIRCRAFT-TRACKING-COMMAND----------------------
+
+CHANNEL_ID = 1471906526326296731  # your alert channel
+
+#@bot.tree.command(name="radar", description="Control NMIA runway radar")
+#async def radar(interaction: discord.Interaction):
+ #   await radar_command(interaction)
+
+#-----------AI BOT CONFIGURE------------
+ALLOWED_CHANNELS=[1471906526326296731,126278539286898697,1262764932877779015,1262765298495393864 ]
+
 # ---------- AUTO GIF RESPONSE ----------
 @bot.event
 async def on_message(message):
-    if message.author.bot or not message.guild:
+    if message.author.bot:
         return
+
     if bot.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
         # Clean the mention from the text (e.g., "@Bot kaisa hai?" -> "kaisa hai?")
         clean_text = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
@@ -219,13 +231,33 @@ async def on_message(message):
 
         # Get response from our brain.py
         response = brain.get_chat_response(message.author.id, clean_text)
-        if message.channel.id in ALLOWED_CHANNELS:
-            # Specified channel mein permanent message
-            await message.reply(response)
-        else:
-            # Doosre channels mein AI response 5 min (300s) baad delete ho jayega
-            await message.reply(f"{response}", delete_after=180)
-    
+        max_len = 1900
+        chunks = [response[i:i + max_len] for i in range(0, len(response), max_len)] or ["..."]
+
+        try:
+            if message.channel.id in ALLOWED_CHANNELS:
+                # Specified channel mein permanent message
+                await message.reply(chunks[0])
+                for extra in chunks[1:]:
+                    await message.channel.send(extra)
+            else:
+                # Doosre channels mein AI response auto-delete
+                await message.reply(chunks[0], delete_after=180)
+                for extra in chunks[1:]:
+                    await message.channel.send(extra, delete_after=180)
+        except discord.HTTPException as e:
+            print(f"Reply failed: {e}")
+            try:
+                await message.channel.send("Reply failed to send (Discord API error).")
+            except discord.HTTPException:
+                pass
+
+    if not message.guild:
+        await bot.process_commands(message)
+        return
+
+
+
     settings = get_settings(message.guild.id)
     if not settings["enabled"]:
         await bot.process_commands(message)
@@ -255,7 +287,5 @@ async def on_message(message):
     await bot.process_commands(message)
 
 asyncio.run(main())
-
-
 
 
