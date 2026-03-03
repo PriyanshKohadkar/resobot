@@ -221,40 +221,35 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    if bot.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
-        # Clean the mention from the text (e.g., "@Bot kaisa hai?" -> "kaisa hai?")
-        clean_text = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
+    if bot.user.mentioned_in(message):
+        # Clean input (Mentions hatao)
+        user_input = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
         
-        if not clean_text:
-            await message.reply("Bol na bhai, sun raha hoon!")
+        if not user_input:
             return
 
-        # Get response from our brain.py
-        response = brain.get_chat_response(message.author.id, clean_text)
-        max_len = 1900
-        chunks = [response[i:i + max_len] for i in range(0, len(response), max_len)] or ["..."]
+        user_id = str(message.author.id)
 
-        try:
-            if message.channel.id in ALLOWED_CHANNELS:
-                # Specified channel mein permanent message
-                await message.reply(chunks[0])
-                for extra in chunks[1:]:
-                    await message.channel.send(extra)
-            else:
-                # Doosre channels mein AI response auto-delete
-                await message.reply(chunks[0], delete_after=180)
-                for extra in chunks[1:]:
-                    await message.channel.send(extra, delete_after=180)
-        except discord.HTTPException as e:
-            print(f"Reply failed: {e}")
+        # Typing indicator dikhao taaki Discord timeout na kare
+        async with message.channel.typing():
             try:
-                await message.channel.send("Reply failed to send (Discord API error).")
-            except discord.HTTPException:
-                pass
+                # 💡 Render Fix: Groq call ko thread mein chalao taaki bot crash na ho
+                loop = asyncio.get_event_loop()
+                response_text = await loop.run_in_executor(None, get_chat_response, user_id, user_input)
 
-    if not message.guild:
-        await bot.process_commands(message)
-        return
+                if response_text:
+                    # 4. Check karo channel allowed hai ya nahi
+                    if message.channel.id in ALLOWED_CHANNELS:
+                        # Permanent reply in allowed channels
+                        await message.reply(response_text, mention_author=False)
+                    else:
+                        # Auto-delete after 5 mins (300s) in other channels
+                        warn = "\n\n*(Bhai, ye AI message 5 min mein gayab ho jayega!)*"
+                        await message.reply(response_text + warn, delete_after=300)
+                
+            except Exception as e:
+                print(f"Render Error: {e}")
+                await message.reply("Bhai, dimaag garam ho gaya hai mera, thodi der ruko!", delete_after=30)
 
 
 
