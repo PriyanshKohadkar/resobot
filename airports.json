@@ -1,0 +1,7 @@
+{
+  "VABB": {"name": "Mumbai International Airport", "lat": 19.0896, "lon": 72.8656, "runways": [90,270]},
+  "VAPO": {"name": "Navi Mumbai International Airport", "lat": 19.086, "lon": 73.020, "runways": [80,260]},
+  "VIDP": {"name": "Delhi Indira Gandhi International", "lat": 28.5562, "lon": 77.1000, "runways": [110,290]},
+  "KJFK": {"name": "New York JFK", "lat": 40.6413, "lon": -73.7781, "runways": [44,224]},
+  "EGLL": {"name": "London Heathrow", "lat": 51.4700, "lon": -0.4543, "runways": [90,270]}
+}
