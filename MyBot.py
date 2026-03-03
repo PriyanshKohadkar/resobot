@@ -7,6 +7,9 @@ from discord.ui import View, Button
 from discord import app_commands
 from pymongo import MongoClient
 from dotenv import load_dotenv
+import brain
+
+from radar_bot import setup_radar
 
 load_dotenv()
 from keep_alive import keep_alive
@@ -18,7 +21,8 @@ MONGO_URI = os.getenv("MONGO_URI")
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="?", intents=intents)
-
+setup_radar(bot)
+monitor_task = None
 # ---------- MongoDB ----------
 mongo = MongoClient(
     MONGO_URI,
@@ -57,6 +61,7 @@ async def on_ready():
     )
     print(f"Logged in as {bot.user}")
     print("✅ Slash commands synced")
+    print("aircraft radar setup completed!!")
 
 async def main():
     async with bot:
@@ -204,7 +209,23 @@ async def giftime(interaction: discord.Interaction, seconds: int):
 async def on_message(message):
     if message.author.bot or not message.guild:
         return
+    if bot.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
+        # Clean the mention from the text (e.g., "@Bot kaisa hai?" -> "kaisa hai?")
+        clean_text = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
+        
+        if not clean_text:
+            await message.reply("Bol na bhai, sun raha hoon!")
+            return
 
+        # Get response from our brain.py
+        response = brain.get_chat_response(message.author.id, clean_text)
+        if message.channel.id in ALLOWED_CHANNELS:
+            # Specified channel mein permanent message
+            await message.reply(response)
+        else:
+            # Doosre channels mein AI response 5 min (300s) baad delete ho jayega
+            await message.reply(f"{response}", delete_after=180)
+    
     settings = get_settings(message.guild.id)
     if not settings["enabled"]:
         await bot.process_commands(message)
@@ -234,6 +255,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 asyncio.run(main())
+
 
 
 
