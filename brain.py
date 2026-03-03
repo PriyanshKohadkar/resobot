@@ -1,56 +1,49 @@
 import os
-from dotenv import load_dotenv
 from groq import Groq
+from dotenv import load_dotenv
 
 load_dotenv()
 
+# Step 1: Check if key is actually loading
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+print(f"DEBUG: Key loaded length: {len(GROQ_API_KEY) if GROQ_API_KEY else '0 (NOT FOUND)'}")
 
-# Initialize Groq Client
-# Get your key from: https://console.groq.com/keys
-client = Groq(api_key=GROQ_API_KEY)
+# Step 2: Initialize client inside a try block
+try:
+    client = Groq(api_key=GROQ_API_KEY)
+    print("DEBUG: Groq Client Initialized Successfully")
+except Exception as e:
+    print(f"DEBUG: Client Init Failed: {e}")
 
-# Dictionary to store history (Simulating Gemini's Chat Session)
 sessions = {}
 
 def get_chat_response(user_id, user_input):
-    # If no session, create a new one with a System Prompt
+    if not GROQ_API_KEY:
+        return "Bhai, Render ko teri API key nahi mil rahi. Environment variables check kar!"
+
     if user_id not in sessions:
-        sessions[user_id] = [
-            {
-                "role": "system", 
-                "content": "You are a genius AI friend. Speak Hinglish for casual chat, but if the user asks a Math or Science question, provide a detailed step-by-step solution in English. Use LaTeX format for equations if necessary."
-            }
-        ]
+        sessions[user_id] = [{"role": "system", "content": "You are a chill friend."}]
     
-    # Add User Message to history
     sessions[user_id].append({"role": "user", "content": user_input})
 
     try:
-        # Calling Groq (Llama 3.3 70B is very smart and free)
+        print(f"DEBUG: Attempting API call for user {user_id}")
+        
+        # Step 3: Use a smaller model for testing (8B is faster and less likely to timeout)
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama3-8b-8192", 
             messages=sessions[user_id],
-            temperature=0.2,
-            max_tokens=2000
+            timeout=20.0
         )
         
         bot_reply = response.choices[0].message.content
+        print("DEBUG: API Call Success!")
         
-        # Add Assistant Reply to history for context/memory
         sessions[user_id].append({"role": "assistant", "content": bot_reply})
-        
-        # Memory Management: Keep only last 10 messages to avoid lag
-        if len(sessions[user_id]) > 12:
-            sessions[user_id] = [sessions[user_id][0]] + sessions[user_id][-10:]
-
         return bot_reply
 
     except Exception as e:
-        print(f"Groq Error: {e}")
-        return "Bhai, dimaag ki batti gul ho gayi hai. Ek minute baad try kar!"
-
-def reset_chat(user_id):
-    """Function to clear memory if needed"""
-    if user_id in sessions:
-        del sessions[user_id]
+        # Is baar hum poora error message bhejenge Discord pe
+        error_msg = f"🚨 Error Type: {type(e).__name__} | Details: {str(e)}"
+        print(f"DEBUG: {error_msg}")
+        return f"Bhai, dimaag garam ho gaya! Reason: {error_msg}"
