@@ -218,38 +218,27 @@ ALLOWED_CHANNELS=[1471906526326296731,126278539286898697,1262764932877779015,126
 # ---------- AUTO GIF RESPONSE ----------
 @bot.event
 async def on_message(message):
-    if message.author.bot:
+    if message.author.bot or not message.guild:
         return
 
-    if bot.user.mentioned_in(message):
-        # Clean input (Mentions hatao)
-        user_input = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
+
+    if bot.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
+        # Clean the mention from the text (e.g., "@Bot kaisa hai?" -> "kaisa hai?")
+        clean_text = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
         
-        if not user_input:
+        if not clean_text:
+            await message.reply("Bol na bhai, sun raha hoon!")
             return
 
-        user_id = str(message.author.id)
-
-        # Typing indicator dikhao taaki Discord timeout na kare
-        async with message.channel.typing():
-            try:
-                # 💡 Render Fix: Groq call ko thread mein chalao taaki bot crash na ho
-                loop = asyncio.get_event_loop()
-                response_text = await loop.run_in_executor(None, get_chat_response, user_id, user_input)
-
-                if response_text:
-                    # 4. Check karo channel allowed hai ya nahi
-                    if message.channel.id in ALLOWED_CHANNELS:
-                        # Permanent reply in allowed channels
-                        await message.reply(response_text, mention_author=False)
-                    else:
-                        # Auto-delete after 5 mins (300s) in other channels
-                        warn = "\n\n*(Bhai, ye AI message 5 min mein gayab ho jayega!)*"
-                        await message.reply(response_text + warn, delete_after=300)
-                
-            except Exception as e:
-                print(f"Render Error: {e}")
-                await message.reply("Bhai, dimaag garam ho gaya hai mera, thodi der ruko!", delete_after=30)
+        # Get response from our brain.py
+        response = brain.get_chat_response(message.author.id, clean_text)
+        if message.channel.id in ALLOWED_CHANNELS:
+            # Specified channel mein permanent message
+            await message.reply(response)
+        else:
+            # Doosre channels mein AI response 5 min (300s) baad delete ho jayega
+            await message.reply(f"{response}", delete_after=180)
+    
 
 
 
@@ -282,5 +271,3 @@ async def on_message(message):
     await bot.process_commands(message)
 
 asyncio.run(main())
-
-
