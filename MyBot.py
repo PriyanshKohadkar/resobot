@@ -231,7 +231,7 @@ async def on_message(message):
             return
 
         # Get response from our brain.py
-        response = brain.get_chat_response(message.author.id, clean_text)
+        response = brain.get_chat_response(message.author.name, clean_text)
         if message.channel.id in ALLOWED_CHANNELS:
             # Specified channel mein permanent message
             await message.reply(response)
@@ -271,3 +271,4 @@ async def on_message(message):
     await bot.process_commands(message)
 
 asyncio.run(main())
+
