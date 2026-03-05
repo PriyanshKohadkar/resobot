@@ -11,62 +11,52 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 try:
     if not GROQ_API_KEY:
         client = None
-        print("🚨 DEBUG: GROQ_API_KEY is EMPTY or NONE!")
+        print("🚨 DEBUG: GROQ_API_KEY is EMPTY!")
     else:
-        # Key ki pehli 4 aur last 4 digits print karega logs mein security ke liye
-        print(f"✅ DEBUG: Key found! Starts with: {GROQ_API_KEY[:4]}... Ends with: {GROQ_API_KEY[-4:]}")
+        print(f"✅ DEBUG: Key found! Starts with: {GROQ_API_KEY[:4]}")
         client = Groq(api_key=GROQ_API_KEY)
-        print("✅ DEBUG: Groq Client object created.")
 except Exception as e:
     client = None
     print(f"🚨 DEBUG: Client Init Error: {str(e)}")
 
-sessions = {}
+# --- SHARED SESSION STORAGE ---
+# Only one list for everyone. 
+# Started with the system prompt.
+shared_history = [{"role": "system", "content": "You are a chill friend speaking Hinglish. Multiple users are talking to you in a group. Use their names to address them if needed."}]
 
-def get_chat_response(user_id, user_input):
-    global client
+def get_chat_response(username, user_input):
+    global client, shared_history
     
-    # Check 1: Key Check
-    if not GROQ_API_KEY:
-        return "❌ Error: Render ke environment variables mein 'GROQ_API_KEY' nahi mili!"
+    if not GROQ_API_KEY or client is None:
+        return "❌ Error: API Key missing or Client not initialized."
 
-    # Check 2: Client Check
-    if client is None:
-        return "❌ Error: Groq client initialize nahi ho paya. Render logs check karo."
-
-    # Session management
-    if user_id not in sessions:
-        sessions[user_id] = [{"role": "system", "content": "You are a chill friend speaking Hinglish."}]
+    # 1. Format input to include the Username
+    # This helps the AI know WHO is talking since the session is shared.
+    formatted_input = f"{username}: {user_input}"
     
-    sessions[user_id].append({"role": "user", "content": user_input})
+    shared_history.append({"role": "user", "content": formatted_input})
+
+    # 2. Memory Management (Keep only last 8 messages + 1 system prompt)
+    # We keep index 0 (system prompt) and the last 8 messages.
+    if len(shared_history) > 9:
+        shared_history = [shared_history[0]] + shared_history[-8:]
 
     try:
-        print(f"⏳ DEBUG: Calling Groq API for user {user_id}...")
+        print(f"⏳ DEBUG: Calling Groq for {username} (Shared Session)...")
         
-        # Check 3: API Call (Using a very stable model name)
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile", 
-            messages=sessions[user_id],
+            messages=shared_history,
             timeout=25.0
         )
         
         bot_reply = response.choices[0].message.content
-        print("✅ DEBUG: API Response received successfully!")
         
-        sessions[user_id].append({"role": "assistant", "content": bot_reply})
+        # 3. Save bot reply to shared history
+        shared_history.append({"role": "assistant", "content": bot_reply})
+        
         return bot_reply
 
     except Exception as e:
-        # --- THE ULTIMATE DEBUG MESSAGE ---
-        error_type = type(e).__name__
         error_detail = str(e)
-        
-        # Ye message seedha Discord pe jayega
-        debug_report = (
-            f"⚠️ **AI Error Report** ⚠️\n"
-            f"**Type:** `{error_type}`\n"
-            f"**Detail:** `{error_detail}`\n"
-            f"**Hint:** {'API Key galat hai' if '401' in error_detail else 'Check Render Logs'}"
-        )
-        print(f"🚨 DEBUG: {debug_report}")
-        return debug_report
+        return f"⚠️ **AI Error Report** ⚠️\n**Detail:** `{error_detail}`"
