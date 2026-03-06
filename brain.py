@@ -22,7 +22,7 @@ except Exception as e:
 # --- SHARED SESSION STORAGE ---
 # Only one list for everyone. 
 # Started with the system prompt.
-shared_history = [{"role": "system", "content": "You are a chill friend speaking Hinglish. Multiple users are talking to you in a group. Use their names to address them if needed."}]
+shared_history = [{"role": "system", "content": "default mode unless specified by user"}]
 
 def get_chat_response(username, user_input):
     global client, shared_history
