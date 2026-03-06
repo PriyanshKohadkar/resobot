@@ -1,2 +1,3 @@
 # resobot
-CODBOT but now its hosted on render.com since replit fucked up 
+XENOS bot code (multi-functional bot)
+contributed by: PriyanshKohadkar and ShravanRisbud
