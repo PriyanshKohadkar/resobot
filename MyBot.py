@@ -66,8 +66,10 @@ async def on_ready():
 async def main():
     async with bot:
         await bot.load_extension("movies")  # 👈 loads movies.py
+        await bot.load_extension("summary")
         await bot.start(TOKEN)
         print("movies.py enabled")
+        print("summary.py enabled")
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -271,4 +273,5 @@ async def on_message(message):
     await bot.process_commands(message)
 
 asyncio.run(main())
+
 
