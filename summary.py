@@ -2,7 +2,7 @@ import os
 import re
 import asyncio
 from typing import List
-
+from google import genai
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import requests
 
 load_dotenv()
+
 
 MODEL_NAME = "gemini-3.1-flash-lite-preview"
 SYSTEM_PROMPT = (
@@ -125,47 +126,17 @@ class Summary(commands.Cog):
             header = f"Summary ({idx}/{len(chunks)})\n"
             await interaction.followup.send(header + chunk)
 
+  
     async def _generate_summary(self, prompt: str) -> str:
-        # Use the Interactions API with store=false so this request is not persisted
-        # as a retrievable Interaction object on Gemini.
-        url = "https://generativelanguage.googleapis.com/v1beta/interactions"
-        headers = {
-            "x-goog-api-key": self._api_key,
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": f"models/{MODEL_NAME}",
-            "store": False,
-            "systemInstruction": {
-                "parts": [{"text": SYSTEM_PROMPT}]
-            },
-            "input": {
-                "parts": [{"text": prompt}]
-            },
-        }
-
-        def _post():
-            return requests.post(
-                url,
-                headers=headers,
-                json=payload,
-                timeout=45,
+        client = genai.Client(api_key=self._api_key)
+        def _call():
+            response = client.models.generate_content(
+                model="gemini-3.1-flash-lite-preview",
+                contents=f"{SYSTEM_PROMPT}\n\n{prompt}"
             )
+            return response.text
 
-        response = await asyncio.to_thread(_post)
-        response.raise_for_status()
-        data = response.json()
-
-        outputs = data.get("output") or []
-        text_parts: List[str] = []
-        for item in outputs:
-            for part in item.get("parts", []):
-                text = part.get("text")
-                if text:
-                    text_parts.append(text)
-
-        return "\n".join(text_parts).strip()
-
+        return await asyncio.to_thread(_call)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Summary(bot))
