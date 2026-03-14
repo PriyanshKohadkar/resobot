@@ -272,6 +272,56 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
+#-----------RETRIEVE MESSAGES----------
+
+# dictionary to store deleted messages
+deleted_messages = {}
+
+@bot.event
+async def on_message_delete(message):
+    if message.author.bot:
+        return
+
+    guild_id = message.guild.id
+    channel_id = message.channel.id
+
+    if guild_id not in deleted_messages:
+        deleted_messages[guild_id] = {}
+
+    if channel_id not in deleted_messages[guild_id]:
+        deleted_messages[guild_id][channel_id] = []
+
+    deleted_messages[guild_id][channel_id].append({
+        "author": str(message.author),
+        "content": message.content
+    })
+
+    # keep only last 10 deleted messages
+    deleted_messages[guild_id][channel_id] = deleted_messages[guild_id][channel_id][-10:]
+
+@bot.tree.command(name="retrieve", description="Retrieve deleted messages")
+@app_commands.describe(amount="Number of deleted messages to show")
+async def retrieve(interaction: discord.Interaction, amount: int = 5):
+
+    guild_id = interaction.guild.id
+    channel_id = interaction.channel.id
+
+    if guild_id not in deleted_messages or channel_id not in deleted_messages[guild_id]:
+        await interaction.response.send_message("No deleted messages found.")
+        return
+
+    msgs = deleted_messages[guild_id][channel_id][-amount:]
+
+    embed = discord.Embed(title="Deleted Messages", color=discord.Color.red())
+
+    for msg in reversed(msgs):
+        embed.add_field(
+            name=f"{msg['author']}",
+            value=msg["content"] if msg["content"] else "*No text content*",
+            inline=False
+        )
+
+    await interaction.response.send_message(embed=embed)
+
+
 asyncio.run(main())
-
-
