@@ -1,8 +1,6 @@
-import os
-import io
+import os 
 import time
 import asyncio
-import PIL.Image
 from google import genai
 from google.genai import types
 from discord.ext import commands
