@@ -61,7 +61,7 @@ async def on_message(message):
             await message.reply("Bol na bhai, sun raha hoon!")
             return
 
-        response = brain.get_chat_response(message.author.name, clean_text)
+        response = await brain.get_chat_response(message.author.name, clean_text)
         if message.channel.id in ALLOWED_CHANNELS:
             await message.reply(response)
         else:
