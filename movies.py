@@ -91,8 +91,8 @@ class MovieCommands(commands.Cog):
         embed.set_footer(text="Powered by TMDB + OMDb")
 
         if poster_path:
-            embed.set_thumbnail(
-                url=f"https://image.tmdb.org/t/p/w200{poster_path}"
+            embed.set_image(
+                url=f"https://image.tmdb.org/t/p/w780{poster_path}"
             )
 
         return embed
@@ -125,7 +125,7 @@ class MovieCommands(commands.Cog):
         embed.add_field(name="⭐ IMDb Rating", value=data.get("imdbRating", "N/A"), inline=False)
         embed.add_field(name="📅 Year", value=data.get("Year", "N/A"), inline=True)
         embed.add_field(name="🎭 Genre", value=data.get("Genre", "N/A"), inline=False)
-        embed.set_thumbnail(url=data.get("Poster"))
+        embed.set_image(url=data.get("Poster"))
         embed.set_footer(text="IMDb Top 250 • Data via OMDb")
 
         await interaction.followup.send(embed=embed)
@@ -233,8 +233,8 @@ class MovieCommands(commands.Cog):
         embed.set_footer(text="Powered by TMDB + OMDb")
 
         if series.get("poster_path"):
-            embed.set_thumbnail(
-                url=f"https://image.tmdb.org/t/p/w200{series['poster_path']}"
+            embed.set_image(
+                url=f"https://image.tmdb.org/t/p/w780{series['poster_path']}"
             )
 
         await interaction.followup.send(embed=embed)
