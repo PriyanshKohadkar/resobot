@@ -92,7 +92,7 @@ class MovieCommands(commands.Cog):
 
         if poster_path:
             embed.set_image(
-                url=f"https://image.tmdb.org/t/p/w780{poster_path}"
+                url=f"https://image.tmdb.org/t/p/original{poster_path}"
             )
 
         return embed
@@ -234,7 +234,7 @@ class MovieCommands(commands.Cog):
 
         if series.get("poster_path"):
             embed.set_image(
-                url=f"https://image.tmdb.org/t/p/w780{series['poster_path']}"
+                url=f"https://image.tmdb.org/t/p/original{series['poster_path']}"
             )
 
         await interaction.followup.send(embed=embed)
