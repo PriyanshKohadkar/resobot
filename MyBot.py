@@ -67,6 +67,7 @@ async def main():
     async with bot:
         await bot.load_extension("movies")  # 👈 loads movies.py
         await bot.load_extension("summary")
+        await bot.load_extension("intel")
         await bot.start(TOKEN)
         print("movies.py enabled")
         print("summary.py enabled")
@@ -269,6 +270,20 @@ async def on_message(message):
 
     if message.content.lower() == "hi":
         await message.channel.send("whatsup!")
+        # Trigger logic for "intel" keyword or mention
+    if message.content.lower().startswith("!intel"):
+        query = message.content[7:].strip() or "latest updates"
+        
+        image_bytes = None
+        if message.attachments:
+            # Simple check for the first attachment
+            att = message.attachments[0]
+            image_bytes = await att.read()
+
+        # Call the function from intel.py
+        from intel import fetch_gemini_intel
+        response = await fetch_gemini_intel(query, image_bytes)
+        await message.channel.send(response)     
 
     await bot.process_commands(message)
 
