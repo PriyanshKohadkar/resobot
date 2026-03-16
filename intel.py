@@ -62,7 +62,7 @@ class Intel(commands.Cog):
                             mime_type=attachment.content_type
                         )
 
-                prompt_text = f"Fetch latest news and explain in Hinglish: {query if query else 'Analyze this image'}"
+                prompt_text = f"Fetch latest information or news and explain in english: {query if query else 'Analyze this image'}"
                 contents = [prompt_text]
                 if image_part:
                     contents.append(image_part)
