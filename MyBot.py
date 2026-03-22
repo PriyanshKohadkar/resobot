@@ -38,6 +38,7 @@ async def main():
         await bot.load_extension("summary")
         await bot.load_extension("intel")
         await bot.load_extension("gif")      # 👈 added
+        await bot.load_extension("music")
         await bot.start(TOKEN)
 
 @bot.event
