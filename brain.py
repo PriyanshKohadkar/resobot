@@ -188,7 +188,7 @@ def build_cross_session_context(mentioned_users: list, requester: str) -> str:
         if not history:
             context_parts.append(f"[No conversation history found for {name}]")
             continue
-        recent = history[1:][-6:]
+        recent = history[1:][-20:]
         summary = "\n".join(
             f"  {'🧑' if m['role'] == 'user' else '🤖'} {m['content']}"
             for m in recent
