@@ -6,7 +6,7 @@ from discord import app_commands
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import brain
-from radar_bot import setup_radar
+
 load_dotenv()
 from keep_alive import keep_alive
 keep_alive()
@@ -14,7 +14,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="?", intents=intents)
-setup_radar(bot)
+
 
 # ---------- EVENTS ----------
 @bot.event
@@ -26,7 +26,7 @@ async def on_ready():
     )
     print(f"Logged in as {bot.user}")
     print("✅ Slash commands synced")
-    print("aircraft radar setup completed!!")
+
 
 async def main():
     async with bot:
