@@ -58,7 +58,7 @@ class Logger(commands.Cog):
         embed.set_author(name=str(before.author), icon_url=before.author.display_avatar.url)
         embed.add_field(name="Channel", value=f"#{before.channel.name}", inline=True)
      #   embed.add_field(name="Message ID", value=before.id, inline=True)
-        embed.add_field(name="Origin Server", value=before.guild.name, inline=True)
+     #   embed.add_field(name="Origin Server", value=before.guild.name, inline=True)
         embed.add_field(name="Before", value=before.content or "*[empty]*", inline=False)
         embed.add_field(name="After", value=after.content or "*[empty]*", inline=False)
       #  embed.set_footer(text=f"Server: {before.guild.name}")
