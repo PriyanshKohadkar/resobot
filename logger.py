@@ -31,11 +31,11 @@ class Logger(commands.Cog):
         )
         embed.set_author(name=str(message.author), icon_url=message.author.display_avatar.url)
         embed.add_field(name="Channel", value=f"#{message.channel.name}", inline=True)
-        embed.add_field(name="Message ID", value=message.id, inline=True)
-        embed.add_field(name="Origin Server", value=message.guild.name, inline=True)
+      #  embed.add_field(name="Message ID", value=message.id, inline=True)
+       # embed.add_field(name="Origin Server", value=message.guild.name, inline=True)
         if message.attachments:
             embed.add_field(name="Attachments", value="\n📎 " + ", ".join(a.url for a in message.attachments), inline=False)
-        embed.set_footer(text=f"Server: {message.guild.name}")
+    #    embed.set_footer(text=f"Server: {message.guild.name}")
 
         await backup.send(embed=embed)
 
