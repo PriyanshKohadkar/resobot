@@ -33,6 +33,28 @@ def format_time(ms: str | None) -> str:
 def ordinal(n: int) -> str:
     return f"{n}{'th' if 11<=n%100<=13 else {1:'st',2:'nd',3:'rd'}.get(n%10,'th')}"
 
+def extract_fastest_lap(results: list) -> str | None:
+    """
+    From a race Results list, find the driver with FastestLap rank == 1
+    and return a formatted string, or None if not available.
+    """
+    for r in results:
+        fl = r.get("FastestLap", {})
+        if str(fl.get("rank", "")) == "1":
+            driver = r.get("Driver", {})
+            code = driver.get("code", "???")
+            full = f"{driver.get('givenName', '')} {driver.get('familyName', '')}".strip()
+            team = r.get("Constructor", {}).get("name", "?")
+            lap_time = fl.get("Time", {}).get("time", "N/A")
+            lap_no = fl.get("lap", "?")
+            avg_speed = fl.get("AverageSpeed", {})
+            speed_val = avg_speed.get("speed", "")
+            speed_units = avg_speed.get("units", "")
+            speed_str = f" • {speed_val} {speed_units}" if speed_val else ""
+            return f"`{code}` {full} — **{team}**\n┗ `{lap_time}` on lap {lap_no}{speed_str}"
+    return None
+
+
 # ── Pagination View ────────────────────────────────────────────
 
 class PaginatedEmbed(discord.ui.View):
@@ -115,13 +137,17 @@ class F1(commands.Cog):
 
     # ── /f1 default: live session → next race ──────────────────
     async def _default(self, interaction: discord.Interaction, session: aiohttp.ClientSession):
-        # Check current season schedule for next race
-        data = await jolpica_get(session, "/current")
-        if not data:
+        # Fetch schedule and last race results concurrently
+        schedule_data, race_data = await asyncio.gather(
+            jolpica_get(session, "/current"),
+            jolpica_get(session, "/current/last/results"),
+        )
+
+        if not schedule_data:
             await interaction.followup.send("❌ Could not reach F1 API. Try again later!", ephemeral=True)
             return
 
-        races = data.get("MRData", {}).get("RaceTable", {}).get("Races", [])
+        races = schedule_data.get("MRData", {}).get("RaceTable", {}).get("Races", [])
         if not races:
             await interaction.followup.send("❌ No race data found.", ephemeral=True)
             return
@@ -144,7 +170,6 @@ class F1(commands.Cog):
             last_race = race
 
         # Check if a session is currently live (within race weekend window)
-        # A race weekend spans Thu–Sun, so check if we're within ±4 days of a race
         live_session = None
         if last_race:
             try:
@@ -156,8 +181,18 @@ class F1(commands.Cog):
             except Exception:
                 pass
 
+        # Extract fastest lap from last race results
+        fastest_lap_str = None
+        if race_data:
+            last_results = (
+                race_data.get("MRData", {})
+                .get("RaceTable", {})
+                .get("Races", [{}])[0]
+                .get("Results", [])
+            )
+            fastest_lap_str = extract_fastest_lap(last_results)
+
         if live_session:
-            # We're in a race weekend — show session info
             circuit = live_session.get("Circuit", {})
             embed = discord.Embed(
                 title=f"🏎️ Race Weekend — {live_session.get('raceName', 'Unknown')}",
@@ -177,6 +212,9 @@ class F1(commands.Cog):
             except Exception:
                 embed.add_field(name="📅 Race Date", value=live_session.get("date", "?"), inline=False)
 
+            if fastest_lap_str:
+                embed.add_field(name="⚡ Fastest Lap (Last Race)", value=fastest_lap_str, inline=False)
+
             embed.add_field(
                 name="💡 Tip",
                 value="Use `/f1 mode:results` for latest session results!",
@@ -186,7 +224,6 @@ class F1(commands.Cog):
             await interaction.followup.send(embed=embed)
 
         elif next_race:
-            # Show next race countdown
             circuit = next_race.get("Circuit", {})
             try:
                 race_ts = int(datetime.fromisoformat(
@@ -220,7 +257,6 @@ class F1(commands.Cog):
 
     # ── /f1 results ────────────────────────────────────────────
     async def _results(self, interaction: discord.Interaction, session: aiohttp.ClientSession):
-        # Try qualifying results first (most recent session)
         qual_data = await jolpica_get(session, "/current/last/qualifying")
         race_data = await jolpica_get(session, "/current/last/results")
 
@@ -229,7 +265,6 @@ class F1(commands.Cog):
 
         now = datetime.now(timezone.utc)
 
-        # Determine which is more recent
         def get_race_dt(race_list):
             if not race_list:
                 return datetime.min.replace(tzinfo=timezone.utc)
@@ -242,7 +277,6 @@ class F1(commands.Cog):
         qual_dt = get_race_dt(qual_races)
         race_dt = get_race_dt(race_races)
 
-        # Show whichever happened more recently, but only if it's in the past
         if qual_races and qual_dt > race_dt and qual_dt <= now:
             await self._show_qualifying(interaction, qual_races[0])
         elif race_races:
@@ -284,6 +318,9 @@ class F1(commands.Cog):
         date = race.get("date", "?")
         results = race.get("Results", [])
 
+        # ── Fastest lap ────────────────────────────────────────
+        fastest_lap_str = extract_fastest_lap(results)
+
         entries = []
         for r in results:
             pos = r.get("position", "?")
@@ -299,13 +336,23 @@ class F1(commands.Cog):
             status = r.get("status", "?")
             time_val = r.get("Time", {}).get("time", "") or f"({status})"
             points = r.get("points", "0")
-            entries.append(f"{medal} `{code}` {name_str} — **{team}**\n┗ {time_val} • +{points} pts")
+
+            # Mark the fastest lap holder with ⚡ in the list
+            fl = r.get("FastestLap", {})
+            fl_marker = " ⚡" if str(fl.get("rank", "")) == "1" else ""
+
+            entries.append(f"{medal} `{code}` {name_str} — **{team}**{fl_marker}\n┗ {time_val} • +{points} pts")
 
         if not entries:
             await interaction.followup.send("❌ No race results found.", ephemeral=True)
             return
 
         pages = paginate(entries, f"🏁 Race Results — {name}\n{circuit} • {date}", F1_RED, per_page=8)
+
+        # Add fastest lap only to the first page
+        if fastest_lap_str:
+            pages[0].add_field(name="⚡ Fastest Lap", value=fastest_lap_str, inline=False)
+
         view = PaginatedEmbed(pages, interaction.user.id)
         await interaction.followup.send(embed=pages[0], view=view)
 
