@@ -166,21 +166,51 @@ class F1(commands.Cog):
         pages = paginate(entries, "📅 F1 2026 Full Season Schedule", F1_RED, per_page=8)
         await interaction.followup.send(embed=pages[0], view=PaginatedEmbed(pages, interaction.user.id))
 
-    async def _show_qualifying(self, interaction, race):
-        entries = [f"{POSITION_MEDALS.get(int(r['position']), f'`{int(r['position']):02d}`')} **{r['Driver'].get('code')}** | {r['Constructor'].get('name')}\n⏱️ `{r.get('Q3') or r.get('Q2') or r.get('Q1') or 'N/A'}`\n" for r in race.get("QualifyingResults", [])]
+   async def _show_qualifying(self, interaction: discord.Interaction, race: dict):
+        results = race.get("QualifyingResults", [])
+        entries = []
+        for r in results:
+            pos = int(r.get("position", 0))
+            medal = POSITION_MEDALS.get(pos, f"`{pos:02d}`") 
+            driver = r.get("Driver", {})
+            full_name = f"{driver.get('givenName')} {driver.get('familyName')}"
+            best = r.get("Q3") or r.get("Q2") or r.get("Q1") or "N/A"
+            
+            entries.append(f"{medal} **{driver.get('code')}** — {full_name}\n⏱️ `{best}` • *{r['Constructor'].get('name')}*\n")
+
         pages = paginate(entries, f"⏱️ Qualifying: {race.get('raceName')}", F1_RED, per_page=6)
-        for p in pages: p.description = f"**{race['Circuit'].get('circuitName')}**\n" + "—"*15 + "\n\n" + p.description
+        for p in pages:
+            p.description = f"**{race['Circuit'].get('circuitName')}**\n" + "—" * 15 + "\n\n" + p.description
+            
         await interaction.followup.send(embed=pages[0], view=PaginatedEmbed(pages, interaction.user.id))
 
-    async def _show_race_results(self, interaction, race):
+    async def _show_race_results(self, interaction: discord.Interaction, race: dict):
         results = race.get("Results", [])
-        entries = [f"{POSITION_MEDALS.get(int(r['position']), f'`{int(r['position']):02d}`')} **{r['Driver'].get('code')}** • {r['Constructor'].get('name')}\n└ `+{r.get('points')} pts` • {r.get('status')}\n" for r in results]
-        pages = paginate(entries, f"🏁 Race Results: {race.get('raceName')}", F1_RED, per_page=6)
-        for p in pages: p.description = f"**{race['Circuit'].get('circuitName')}**\n" + "—"*15 + "\n\n" + p.description
-        fl = extract_fastest_lap(results)
-        if fl: pages[0].insert_field_at(0, name="⚡ Fastest Lap", value=fl, inline=False)
-        await interaction.followup.send(embed=pages[0], view=PaginatedEmbed(pages, interaction.user.id))
+        entries = []
+        for r in results:
+            try:
+                p_int = int(r.get("position"))
+                medal = POSITION_MEDALS.get(p_int, f"`{p_int:02d}`")
+            except:
+                medal = f"`{r.get('position')}`"
+                
+            driver = r.get("Driver", {})
+            full_name = f"{driver.get('givenName')} {driver.get('familyName')}"
+            points = r.get("points", "0")
+            status = r.get("status", "Finished") # Keeps the "Finished" or "DNF" word
+            
+            entries.append(f"{medal} **{driver.get('code')}** — {full_name}\n└ `+{points} pts` • {status}\n")
 
+        pages = paginate(entries, f"🏁 Race Results: {race.get('raceName')}", F1_RED, per_page=6)
+        for p in pages:
+            p.description = f"**{race['Circuit'].get('circuitName')}**\n" + "—" * 15 + "\n\n" + p.description
+        
+        fl = extract_fastest_lap(results)
+        if fl:
+            pages[0].insert_field_at(0, name="⚡ Fastest Lap", value=fl, inline=False)
+
+        await interaction.followup.send(embed=pages[0], view=PaginatedEmbed(pages, interaction.user.id))
+        
     async def _constructors(self, interaction, session):
         data = await jolpica_get(session, "/current/constructorStandings")
         standings = data.get("MRData", {}).get("StandingsTable", {}).get("StandingsLists", [{}])[0].get("ConstructorStandings", [])
