@@ -5,10 +5,10 @@ from discord import app_commands
 import aiohttp
 import asyncio
 import os
+from datetime import datetime, timezone
 
-# Get from https://cricketdata.org/signup.aspx (free, 100 req/day)
 CRICAPI_KEY = os.getenv("CRICAPI_KEY")
-API_URL = f"https://api.cricapi.com/v1/currentMatches?apikey={CRICAPI_KEY}&offset=0"
+BASE_URL = "https://api.cricapi.com/v1"
 
 TEAM_COLORS = {
     "MI":   0x004BA0,
@@ -23,109 +23,162 @@ TEAM_COLORS = {
     "LSG":  0xA2FFFF,
 }
 
-def get_color(name: str) -> int:
-    name_upper = name.upper()
+def get_color(team1: str, team2: str = "") -> int:
+    combined = (team1 + " " + team2).upper()
     for abbr, color in TEAM_COLORS.items():
-        if abbr in name_upper:
+        if abbr in combined:
             return color
-    return 0xFF6B00  # IPL orange fallback
+    return 0xFF6B00
+
+def is_ipl(match: dict) -> bool:
+    name = match.get("name", "").lower()
+    series = match.get("series", "").lower()
+    return "ipl" in name or "indian premier league" in series
+
+def build_score_field(scores: list) -> str:
+    if not scores:
+        return "No score available"
+    lines = []
+    for inn in scores:
+        team = inn.get("inning", "?")
+        r, w, o = inn.get("r", "?"), inn.get("w", "?"), inn.get("o", "?")
+        lines.append(f"**{team}:** {r}/{w} ({o} ov)")
+    return "\n".join(lines)
+
+def build_embed(match: dict, label: str) -> discord.Embed:
+    name = match.get("name", "Unknown Match")
+    status = match.get("status", "")
+    venue = match.get("venue", "Unknown Venue")
+    date = match.get("date", "")
+    teams = match.get("teams", [])
+    scores = match.get("score", [])
+
+    team1 = teams[0] if len(teams) > 0 else ""
+    team2 = teams[1] if len(teams) > 1 else ""
+    color = get_color(team1, team2)
+
+    embed = discord.Embed(title=f"🏏 {label} — {name}", color=color)
+    embed.add_field(name="📍 Venue", value=venue, inline=False)
+    if date:
+        embed.add_field(name="📅 Date", value=date, inline=True)
+    if scores:
+        embed.add_field(name="📊 Scores", value=build_score_field(scores), inline=False)
+    elif "Upcoming" in label:
+        embed.add_field(name="📊 Scores", value="Match hasn't started yet", inline=False)
+    if status:
+        embed.add_field(name="📢 Status", value=status, inline=False)
+    embed.set_footer(text="Powered by cricketdata.org")
+    return embed
 
 
 class IPL(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="ipl", description="Get live IPL 2026 match scores 🏏")
-    async def ipl(self, interaction: discord.Interaction):
+    async def fetch_matches(self, endpoint: str) -> list | None:
+        if not CRICAPI_KEY:
+            return None
+        url = f"{BASE_URL}/{endpoint}?apikey={CRICAPI_KEY}&offset=0"
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status != 200:
+                        return None
+                    data = await resp.json()
+                    if data.get("status") != "success":
+                        return None
+                    return data.get("data", [])
+        except Exception:
+            return None
+
+    def parse_date(self, m: dict) -> datetime:
+        try:
+            return datetime.fromisoformat(m.get("dateTimeGMT", "").replace("Z", "+00:00"))
+        except Exception:
+            return datetime.max.replace(tzinfo=timezone.utc)
+
+    @app_commands.command(name="ipl", description="IPL 2026 live score or upcoming match 🏏")
+    @app_commands.describe(mode="What to show — defaults to live score")
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="upcoming", value="upcoming"),
+    ])
+    async def ipl(self, interaction: discord.Interaction, mode: app_commands.Choice[str] = None):
         await interaction.response.defer()
 
         if not CRICAPI_KEY:
-            await interaction.followup.send(
-                "❌ `CRICAPI_KEY` env variable is not set. Add it to your Render env vars!",
-                ephemeral=True
-            )
+            await interaction.followup.send("❌ `CRICAPI_KEY` env var not set!", ephemeral=True)
             return
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(API_URL, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    if resp.status != 200:
-                        await interaction.followup.send("❌ CricAPI returned an error. Try again later!", ephemeral=True)
-                        return
-                    data = await resp.json()
-        except asyncio.TimeoutError:
-            await interaction.followup.send("⏳ API timed out. Try again in a bit!", ephemeral=True)
+        # ── /ipl upcoming ──────────────────────────────────────
+        if mode and mode.value == "upcoming":
+            matches = await self.fetch_matches("matches")
+            if matches is None:
+                await interaction.followup.send("❌ Could not reach CricAPI. Try again later!", ephemeral=True)
+                return
+
+            now = datetime.now(timezone.utc)
+            ipl_upcoming = [
+                m for m in matches
+                if is_ipl(m) and not m.get("matchStarted", False) and self.parse_date(m) > now
+            ]
+            ipl_upcoming.sort(key=self.parse_date)
+
+            if not ipl_upcoming:
+                embed = discord.Embed(
+                    title="🏏 IPL 2026 — Upcoming",
+                    description="No upcoming matches found. Season might be over!",
+                    color=0xFF6B00
+                )
+                embed.set_footer(text="Powered by cricketdata.org")
+                await interaction.followup.send(embed=embed)
+                return
+
+            next_match = ipl_upcoming[0]
+            dt = self.parse_date(next_match)
+            unix_ts = int(dt.timestamp())
+            time_str = f"<t:{unix_ts}:F> (<t:{unix_ts}:R>)"
+
+            embed = build_embed(next_match, "📅 Upcoming")
+            for i, field in enumerate(embed.fields):
+                if field.name == "📅 Date":
+                    embed.set_field_at(i, name="📅 Date & Time", value=time_str, inline=False)
+                    break
+
+            await interaction.followup.send(embed=embed)
             return
-        except Exception as e:
-            await interaction.followup.send(f"❌ Something went wrong: `{e}`", ephemeral=True)
+
+        # ── /ipl (default: live → recent fallback) ─────────────
+        matches = await self.fetch_matches("currentMatches")
+        if matches is None:
+            await interaction.followup.send("❌ Could not reach CricAPI. Try again later!", ephemeral=True)
             return
 
-        if data.get("status") != "success":
-            await interaction.followup.send("❌ CricAPI error: " + data.get("reason", "Unknown"), ephemeral=True)
+        ipl_live = [m for m in matches if is_ipl(m) and not m.get("matchEnded", False)]
+
+        if ipl_live:
+            embeds = [build_embed(m, "🔴 Live") for m in ipl_live[:5]]
+            await interaction.followup.send(embeds=embeds)
             return
 
-        matches = data.get("data", [])
+        # Fallback to recent result
+        recent_matches = await self.fetch_matches("matches")
+        if recent_matches is None:
+            await interaction.followup.send("❌ Could not fetch recent matches.", ephemeral=True)
+            return
 
-        # Filter for IPL matches only
-        ipl_matches = [
-            m for m in matches
-            if "ipl" in m.get("name", "").lower() or "indian premier league" in m.get("series", "").lower()
-        ]
+        ipl_ended = [m for m in recent_matches if is_ipl(m) and m.get("matchEnded", False)]
 
-        if not ipl_matches:
+        if not ipl_ended:
             embed = discord.Embed(
-                title="🏏 IPL 2026 — Live Scores",
-                description="No IPL matches live right now. Check back during match time!\n\n> Matches are usually at **7:30 PM** and **3:30 PM IST**.",
+                title="🏏 IPL 2026",
+                description="No live or recent IPL matches found.\nTry `/ipl mode:upcoming` to see what's next!",
                 color=0xFF6B00
             )
             embed.set_footer(text="Powered by cricketdata.org")
             await interaction.followup.send(embed=embed)
             return
 
-        embeds = []
-        for match in ipl_matches[:5]:  # max 5 embeds
-            name = match.get("name", "Unknown Match")
-            status = match.get("status", "")
-            match_type = match.get("matchType", "T20").upper()
-            venue = match.get("venue", "Unknown Venue")
-            date = match.get("date", "")
-            teams = match.get("teams", [])
-            scores = match.get("score", [])
-
-            team1 = teams[0] if len(teams) > 0 else "Team 1"
-            team2 = teams[1] if len(teams) > 1 else "Team 2"
-            color = get_color(team1) if get_color(team1) != 0xFF6B00 else get_color(team2)
-
-            embed = discord.Embed(
-                title=f"🏏 {name}",
-                color=color
-            )
-            embed.add_field(name="📍 Venue", value=venue, inline=False)
-            embed.add_field(name="🎮 Format", value=match_type, inline=True)
-            if date:
-                embed.add_field(name="📅 Date", value=date, inline=True)
-
-            # Scores
-            if scores:
-                score_text = ""
-                for innings in scores:
-                    inn_team = innings.get("inning", "?")
-                    runs = innings.get("r", "?")
-                    wickets = innings.get("w", "?")
-                    overs = innings.get("o", "?")
-                    score_text += f"**{inn_team}:** {runs}/{wickets} ({overs} ov)\n"
-                embed.add_field(name="📊 Scores", value=score_text.strip(), inline=False)
-            else:
-                embed.add_field(name="📊 Scores", value="Match not started yet", inline=False)
-
-            # Status
-            if status:
-                embed.add_field(name="📢 Status", value=status, inline=False)
-
-            embed.set_footer(text="Live data • cricketdata.org • Free tier: 100 req/day")
-            embeds.append(embed)
-
-        await interaction.followup.send(embeds=embeds)
+        await interaction.followup.send(embed=build_embed(ipl_ended[0], "✅ Recent Result"))
 
 
 async def setup(bot):
