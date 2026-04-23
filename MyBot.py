@@ -36,6 +36,7 @@ async def main():
         await bot.load_extension("gif")
         await bot.load_extension("minecraft")
         await bot.load_extension("logger")
+        await bot.load_extension("ipl")
         await bot.start(TOKEN)
 
 @bot.event
