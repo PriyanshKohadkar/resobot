@@ -7,10 +7,7 @@ import asyncio
 from datetime import datetime, timezone
 
 JOLPICA_BASE = "https://api.jolpi.ca/ergast/f1"
-
-TYRE_EMOJI = {"SOFT": "🔴", "MEDIUM": "🟡", "HARD": "⬜", "INTER": "🟢", "WET": "🔵"}
 F1_RED = 0xE8002D
-
 POSITION_MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
 # ── Helpers ────────────────────────────────────────────────────
@@ -19,50 +16,27 @@ async def jolpica_get(session: aiohttp.ClientSession, path: str) -> dict | None:
     url = f"{JOLPICA_BASE}{path}.json"
     try:
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-            if resp.status != 200:
-                return None
+            if resp.status != 200: return None
             return await resp.json()
-    except Exception:
-        return None
-
-def format_time(ms: str | None) -> str:
-    if not ms:
-        return "N/A"
-    return ms
-
-def ordinal(n: int) -> str:
-    return f"{n}{'th' if 11<=n%100<=13 else {1:'st',2:'nd',3:'rd'}.get(n%10,'th')}"
+    except Exception: return None
 
 def extract_fastest_lap(results: list) -> str | None:
-    """
-    From a race Results list, find the driver with FastestLap rank == 1
-    and return a formatted string, or None if not available.
-    """
     for r in results:
         fl = r.get("FastestLap", {})
         if str(fl.get("rank", "")) == "1":
             driver = r.get("Driver", {})
             code = driver.get("code", "???")
-            full = f"{driver.get('givenName', '')} {driver.get('familyName', '')}".strip()
             team = r.get("Constructor", {}).get("name", "?")
             lap_time = fl.get("Time", {}).get("time", "N/A")
-            lap_no = fl.get("lap", "?")
-            avg_speed = fl.get("AverageSpeed", {})
-            speed_val = avg_speed.get("speed", "")
-            speed_units = avg_speed.get("units", "")
-            speed_str = f" • {speed_val} {speed_units}" if speed_val else ""
-            return f"`{code}` {full} — **{team}**\n┗ `{lap_time}` on lap {lap_no}{speed_str}"
+            return f"`{code}` — **{team}**\n⏱️ `{lap_time}`"
     return None
-
 
 # ── Pagination View ────────────────────────────────────────────
 
 class PaginatedEmbed(discord.ui.View):
     def __init__(self, pages: list[discord.Embed], author_id: int):
         super().__init__(timeout=120)
-        self.pages = pages
-        self.current = 0
-        self.author_id = author_id
+        self.pages, self.current, self.author_id = pages, 0, author_id
         self._update_buttons()
 
     def _update_buttons(self):
@@ -71,40 +45,22 @@ class PaginatedEmbed(discord.ui.View):
         for page in self.pages:
             page.set_footer(text=f"Page {self.current + 1}/{len(self.pages)} • Powered by Jolpica/Ergast")
 
-    async def _check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message("These aren't your buttons!", ephemeral=True)
-            return False
-        return True
-
     @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary)
     async def prev_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await self._check(interaction):
-            return
+        if interaction.user.id != self.author_id: return
         self.current -= 1
         self._update_buttons()
         await interaction.response.edit_message(embed=self.pages[self.current], view=self)
 
     @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary)
     async def next_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await self._check(interaction):
-            return
+        if interaction.user.id != self.author_id: return
         self.current += 1
         self._update_buttons()
         await interaction.response.edit_message(embed=self.pages[self.current], view=self)
 
-    async def on_timeout(self):
-        for item in self.children:
-            item.disabled = True
-
 def paginate(entries: list[str], title: str, color: int, per_page: int = 10) -> list[discord.Embed]:
-    pages = []
-    for i in range(0, len(entries), per_page):
-        chunk = entries[i:i + per_page]
-        embed = discord.Embed(title=title, description="\n".join(chunk), color=color)
-        pages.append(embed)
-    return pages
-
+    return [discord.Embed(title=title, description="\n".join(entries[i:i + per_page]), color=color) for i in range(0, len(entries), per_page)]
 
 # ── Cog ───────────────────────────────────────────────────────
 
@@ -122,347 +78,114 @@ class F1(commands.Cog):
     ])
     async def f1(self, interaction: discord.Interaction, mode: app_commands.Choice[str] = None):
         await interaction.response.defer()
-
         async with aiohttp.ClientSession() as session:
-            if mode is None:
-                await self._default(interaction, session)
-            elif mode.value == "results":
-                await self._results(interaction, session)
-            elif mode.value == "drivers":
-                await self._drivers(interaction, session)
-            elif mode.value == "constructors":
-                await self._constructors(interaction, session)
-            elif mode.value == "schedule":
-                await self._schedule(interaction, session)
+            if mode is None: await self._default(interaction, session)
+            elif mode.value == "results": await self._results(interaction, session)
+            elif mode.value == "drivers": await self._drivers(interaction, session)
+            elif mode.value == "constructors": await self._constructors(interaction, session)
+            elif mode.value == "schedule": await self._schedule(interaction, session)
 
-    # ── /f1 default: live session → next race ──────────────────
+    # ── /f1 default (Next Race View) ──────────────────
     async def _default(self, interaction: discord.Interaction, session: aiohttp.ClientSession):
-        # Fetch schedule and last race results concurrently
-        schedule_data, race_data = await asyncio.gather(
-            jolpica_get(session, "/current"),
-            jolpica_get(session, "/current/last/results"),
-        )
-
-        if not schedule_data:
-            await interaction.followup.send("❌ Could not reach F1 API. Try again later!", ephemeral=True)
-            return
-
-        races = schedule_data.get("MRData", {}).get("RaceTable", {}).get("Races", [])
-        if not races:
-            await interaction.followup.send("❌ No race data found.", ephemeral=True)
-            return
-
-        now = datetime.now(timezone.utc)
-
-        # Find current or next race
-        next_race = None
-        last_race = None
-        for race in races:
-            try:
-                race_dt_str = f"{race['date']}T{race.get('time', '00:00:00Z')}"
-                race_dt = datetime.fromisoformat(race_dt_str.replace("Z", "+00:00"))
-            except Exception:
-                continue
-
-            if race_dt > now:
-                next_race = race
-                break
-            last_race = race
-
-        # Check if a session is currently live (within race weekend window)
-        live_session = None
-        if last_race:
-            try:
-                last_dt_str = f"{last_race['date']}T{last_race.get('time', '00:00:00Z')}"
-                last_dt = datetime.fromisoformat(last_dt_str.replace("Z", "+00:00"))
-                diff_hours = abs((now - last_dt).total_seconds() / 3600)
-                if diff_hours < 96:  # within 4 days = still race weekend
-                    live_session = last_race
-            except Exception:
-                pass
-
-        # Extract fastest lap from last race results
-        fastest_lap_str = None
-        if race_data:
-            last_results = (
-                race_data.get("MRData", {})
-                .get("RaceTable", {})
-                .get("Races", [{}])[0]
-                .get("Results", [])
-            )
-            fastest_lap_str = extract_fastest_lap(last_results)
-
-        if live_session:
-            circuit = live_session.get("Circuit", {})
-            embed = discord.Embed(
-                title=f"🏎️ Race Weekend — {live_session.get('raceName', 'Unknown')}",
-                description=f"Round {live_session.get('round', '?')} of the 2026 F1 Season",
-                color=F1_RED
-            )
-            embed.add_field(
-                name="🏟️ Circuit",
-                value=f"{circuit.get('circuitName', '?')}, {circuit.get('Location', {}).get('country', '?')}",
-                inline=False
-            )
-            try:
-                race_ts = int(datetime.fromisoformat(
-                    f"{live_session['date']}T{live_session.get('time', '00:00:00Z')}".replace("Z", "+00:00")
-                ).timestamp())
-                embed.add_field(name="🏁 Race", value=f"<t:{race_ts}:F> (<t:{race_ts}:R>)", inline=False)
-            except Exception:
-                embed.add_field(name="📅 Race Date", value=live_session.get("date", "?"), inline=False)
-
-            if fastest_lap_str:
-                embed.add_field(name="⚡ Fastest Lap (Last Race)", value=fastest_lap_str, inline=False)
-
-            embed.add_field(
-                name="💡 Tip",
-                value="Use `/f1 mode:results` for latest session results!",
-                inline=False
-            )
-            embed.set_footer(text="Powered by Jolpica/Ergast")
-            await interaction.followup.send(embed=embed)
-
-        elif next_race:
-            circuit = next_race.get("Circuit", {})
-            try:
-                race_ts = int(datetime.fromisoformat(
-                    f"{next_race['date']}T{next_race.get('time', '00:00:00Z')}".replace("Z", "+00:00")
-                ).timestamp())
-                time_str = f"<t:{race_ts}:F>\n<t:{race_ts}:R>"
-            except Exception:
-                time_str = next_race.get("date", "?")
-
-            embed = discord.Embed(
-                title=f"🏎️ Next Race — {next_race.get('raceName', 'Unknown')}",
-                description=f"Round {next_race.get('round', '?')} of the 2026 F1 Season",
-                color=F1_RED
-            )
-            embed.add_field(
-                name="🏟️ Circuit",
-                value=f"{circuit.get('circuitName', '?')}, {circuit.get('Location', {}).get('country', '?')}",
-                inline=False
-            )
-            embed.add_field(name="📅 Race", value=time_str, inline=False)
-            embed.set_footer(text="Powered by Jolpica/Ergast")
-            await interaction.followup.send(embed=embed)
-
-        else:
-            embed = discord.Embed(
-                title="🏎️ F1 2026",
-                description="Season appears to be over! Stay tuned for 2027.",
-                color=F1_RED
-            )
-            await interaction.followup.send(embed=embed)
-
-    # ── /f1 results ────────────────────────────────────────────
-    async def _results(self, interaction: discord.Interaction, session: aiohttp.ClientSession):
-        qual_data = await jolpica_get(session, "/current/last/qualifying")
-        race_data = await jolpica_get(session, "/current/last/results")
-
-        qual_races = qual_data.get("MRData", {}).get("RaceTable", {}).get("Races", []) if qual_data else []
-        race_races = race_data.get("MRData", {}).get("RaceTable", {}).get("Races", []) if race_data else []
-
-        now = datetime.now(timezone.utc)
-
-        def get_race_dt(race_list):
-            if not race_list:
-                return datetime.min.replace(tzinfo=timezone.utc)
-            r = race_list[0]
-            try:
-                return datetime.fromisoformat(f"{r['date']}T{r.get('time','00:00:00Z')}".replace("Z", "+00:00"))
-            except Exception:
-                return datetime.min.replace(tzinfo=timezone.utc)
-
-        qual_dt = get_race_dt(qual_races)
-        race_dt = get_race_dt(race_races)
-
-        if qual_races and qual_dt > race_dt and qual_dt <= now:
-            await self._show_qualifying(interaction, qual_races[0])
-        elif race_races:
-            await self._show_race_results(interaction, race_races[0])
-        else:
-            await interaction.followup.send("❌ No recent results found.", ephemeral=True)
-
-    async def _show_qualifying(self, interaction: discord.Interaction, race: dict):
-        name = race.get("raceName", "Unknown")
-        circuit = race.get("Circuit", {}).get("circuitName", "?")
-        date = race.get("date", "?")
-        results = race.get("QualifyingResults", [])
-
-        entries = []
-        for r in results:
-            pos = int(r.get("position", 0))
-            medal = POSITION_MEDALS.get(pos, f"**P{pos}**")
-            driver = r.get("Driver", {})
-            code = driver.get("code", "???")
-            name_str = f"{driver.get('givenName', '')} {driver.get('familyName', '')}".strip()
-            team = r.get("Constructor", {}).get("name", "?")
-            q3 = r.get("Q3", "")
-            q2 = r.get("Q2", "")
-            q1 = r.get("Q1", "")
-            best = q3 or q2 or q1 or "N/A"
-            entries.append(f"{medal} `{code}` {name_str} — **{team}**\n┗ Best: `{best}`")
-
-        if not entries:
-            await interaction.followup.send("❌ No qualifying results found.", ephemeral=True)
-            return
-
-        pages = paginate(entries, f"🏎️ Qualifying — {name}\n{circuit} • {date}", F1_RED, per_page=8)
-        view = PaginatedEmbed(pages, interaction.user.id)
-        await interaction.followup.send(embed=pages[0], view=view)
-
-    async def _show_race_results(self, interaction: discord.Interaction, race: dict):
-        name = race.get("raceName", "Unknown")
-        circuit = race.get("Circuit", {}).get("circuitName", "?")
-        date = race.get("date", "?")
-        results = race.get("Results", [])
-
-        # ── Fastest lap ────────────────────────────────────────
-        fastest_lap_str = extract_fastest_lap(results)
-
-        entries = []
-        for r in results:
-            pos = r.get("position", "?")
-            try:
-                pos_int = int(pos)
-                medal = POSITION_MEDALS.get(pos_int, f"**P{pos_int}**")
-            except Exception:
-                medal = f"**{pos}**"
-            driver = r.get("Driver", {})
-            code = driver.get("code", "???")
-            name_str = f"{driver.get('givenName', '')} {driver.get('familyName', '')}".strip()
-            team = r.get("Constructor", {}).get("name", "?")
-            status = r.get("status", "?")
-            time_val = r.get("Time", {}).get("time", "") or f"({status})"
-            points = r.get("points", "0")
-
-            # Mark the fastest lap holder with ⚡ in the list
-            fl = r.get("FastestLap", {})
-            fl_marker = " ⚡" if str(fl.get("rank", "")) == "1" else ""
-
-            entries.append(f"{medal} `{code}` {name_str} — **{team}**{fl_marker}\n┗ {time_val} • +{points} pts")
-
-        if not entries:
-            await interaction.followup.send("❌ No race results found.", ephemeral=True)
-            return
-
-        pages = paginate(entries, f"🏁 Race Results — {name}\n{circuit} • {date}", F1_RED, per_page=8)
-
-        # Add fastest lap only to the first page
-        if fastest_lap_str:
-            pages[0].add_field(name="⚡ Fastest Lap", value=fastest_lap_str, inline=False)
-
-        view = PaginatedEmbed(pages, interaction.user.id)
-        await interaction.followup.send(embed=pages[0], view=view)
-
-    # ── /f1 drivers ────────────────────────────────────────────
-    async def _drivers(self, interaction: discord.Interaction, session: aiohttp.ClientSession):
-        data = await jolpica_get(session, "/current/driverStandings")
-        if not data:
-            await interaction.followup.send("❌ Could not fetch driver standings.", ephemeral=True)
-            return
-
-        standings_list = (
-            data.get("MRData", {})
-            .get("StandingsTable", {})
-            .get("StandingsLists", [])
-        )
-        if not standings_list:
-            await interaction.followup.send("❌ No standings data found.", ephemeral=True)
-            return
-
-        standings = standings_list[0].get("DriverStandings", [])
-        entries = []
-        for s in standings:
-            pos = int(s.get("position", 0))
-            medal = POSITION_MEDALS.get(pos, f"**P{pos}**")
-            driver = s.get("Driver", {})
-            code = driver.get("code", "???")
-            full = f"{driver.get('givenName','')} {driver.get('familyName','')}".strip()
-            team = s.get("Constructors", [{}])[0].get("name", "?")
-            points = s.get("points", "0")
-            wins = s.get("wins", "0")
-            entries.append(f"{medal} `{code}` {full} — **{team}**\n┗ {points} pts • {wins} wins")
-
-        pages = paginate(entries, "🏆 Driver Championship — 2026", F1_RED, per_page=8)
-        view = PaginatedEmbed(pages, interaction.user.id)
-        await interaction.followup.send(embed=pages[0], view=view)
-
-    # ── /f1 constructors ───────────────────────────────────────
-    async def _constructors(self, interaction: discord.Interaction, session: aiohttp.ClientSession):
-        data = await jolpica_get(session, "/current/constructorStandings")
-        if not data:
-            await interaction.followup.send("❌ Could not fetch constructor standings.", ephemeral=True)
-            return
-
-        standings_list = (
-            data.get("MRData", {})
-            .get("StandingsTable", {})
-            .get("StandingsLists", [])
-        )
-        if not standings_list:
-            await interaction.followup.send("❌ No standings data found.", ephemeral=True)
-            return
-
-        standings = standings_list[0].get("ConstructorStandings", [])
-        entries = []
-        for s in standings:
-            pos = int(s.get("position", 0))
-            medal = POSITION_MEDALS.get(pos, f"**P{pos}**")
-            team = s.get("Constructor", {}).get("name", "?")
-            points = s.get("points", "0")
-            wins = s.get("wins", "0")
-            entries.append(f"{medal} **{team}**\n┗ {points} pts • {wins} wins")
-
-        pages = paginate(entries, "🏗️ Constructor Championship — 2026", F1_RED, per_page=8)
-        view = PaginatedEmbed(pages, interaction.user.id)
-        await interaction.followup.send(embed=pages[0], view=view)
-
-    # ── /f1 schedule ───────────────────────────────────────────
-    async def _schedule(self, interaction: discord.Interaction, session: aiohttp.ClientSession):
         data = await jolpica_get(session, "/current")
         if not data:
-            await interaction.followup.send("❌ Could not fetch schedule.", ephemeral=True)
+            await interaction.followup.send("❌ API Error.")
             return
 
         races = data.get("MRData", {}).get("RaceTable", {}).get("Races", [])
         now = datetime.now(timezone.utc)
+        next_race = None
+        for r in races:
+            try:
+                dt = datetime.fromisoformat(f"{r['date']}T{r.get('time', '00:00:00Z')}".replace("Z", "+00:00"))
+                if dt > now:
+                    next_race = r
+                    break
+            except: continue
+        
+        if next_race:
+            circuit = next_race.get("Circuit", {})
+            loc = circuit.get("Location", {})
+            ts = int(datetime.fromisoformat(f"{next_race['date']}T{next_race.get('time', '00:00:00Z')}".replace("Z", "+00:00")).timestamp())
+            
+            embed = discord.Embed(
+                title=f"🏎️ Next Race — {next_race['raceName']}",
+                description=f"Round {next_race['round']} of the 2026 F1 Season",
+                color=F1_RED
+            )
+            embed.add_field(
+                name="🏟️ Circuit", 
+                value=f"{circuit.get('circuitName')}, {loc.get('country')}", 
+                inline=False
+            )
+            embed.add_field(
+                name="📅 Race", 
+                value=f"<t:{ts}:F>\n<t:{ts}:R>", 
+                inline=False
+            )
+            embed.set_footer(text="Powered by Jolpica/Ergast")
+            await interaction.followup.send(embed=embed)
+        else:
+            await interaction.followup.send("Season appears to be over!")
 
+    async def _results(self, interaction, session):
+        q_data, r_data = await asyncio.gather(
+            jolpica_get(session, "/current/last/qualifying"),
+            jolpica_get(session, "/current/last/results")
+        )
+        q_race = q_data.get("MRData", {}).get("RaceTable", {}).get("Races", [None])[0]
+        r_race = r_data.get("MRData", {}).get("RaceTable", {}).get("Races", [None])[0]
+
+        if r_race and (not q_race or int(r_race['round']) >= int(q_race['round'])):
+            await self._show_race_results(interaction, r_race)
+        elif q_race:
+            await self._show_qualifying(interaction, q_race)
+
+    async def _drivers(self, interaction, session):
+        data = await jolpica_get(session, "/current/driverStandings")
+        standings = data.get("MRData", {}).get("StandingsTable", {}).get("StandingsLists", [{}])[0].get("DriverStandings", [])
         entries = []
-        for race in races:
+        for s in standings:
+            pos = int(s['position'])
+            medal = POSITION_MEDALS.get(pos, f"`{pos:02d}`")
+            name = f"{s['Driver'].get('givenName')} {s['Driver'].get('familyName')}"
+            entries.append(f"{medal} **{s['Driver']['code']}** — {name}\n└ `{s['points']} pts` • *{s['Constructors'][0]['name']}*\n")
+        pages = paginate(entries, "🏆 Driver World Championship", F1_RED, per_page=7)
+        await interaction.followup.send(embed=pages[0], view=PaginatedEmbed(pages, interaction.user.id))
+
+    async def _schedule(self, interaction, session):
+        data = await jolpica_get(session, "/current")
+        races = data.get("MRData", {}).get("RaceTable", {}).get("Races", [])
+        now, entries = datetime.now(timezone.utc), []
+        for r in races:
             try:
-                race_ts = int(datetime.fromisoformat(
-                    f"{race['date']}T{race.get('time','00:00:00Z')}".replace("Z", "+00:00")
-                ).timestamp())
-                time_str = f"<t:{race_ts}:d>"
-            except Exception:
-                time_str = race.get("date", "?")
+                dt = datetime.fromisoformat(f"{r['date']}T{r.get('time','00:00:00Z')}".replace("Z", "+00:00"))
+                status = "✅" if dt < now else "🔜"
+                entries.append(f"{status} **R{r['round']}** <t:{int(dt.timestamp())}:d> — {r['raceName']}\n┗ {r['Circuit']['Location'].get('country')}\n")
+            except: continue
+        pages = paginate(entries, "📅 F1 2026 Full Season Schedule", F1_RED, per_page=8)
+        await interaction.followup.send(embed=pages[0], view=PaginatedEmbed(pages, interaction.user.id))
 
-            circuit = race.get("Circuit", {})
-            country = circuit.get("Location", {}).get("country", "?")
-            round_no = race.get("round", "?")
-            name = race.get("raceName", "?")
+    async def _show_qualifying(self, interaction, race):
+        entries = [f"{POSITION_MEDALS.get(int(r['position']), f'`{int(r['position']):02d}`')} **{r['Driver'].get('code')}** | {r['Constructor'].get('name')}\n⏱️ `{r.get('Q3') or r.get('Q2') or r.get('Q1') or 'N/A'}`\n" for r in race.get("QualifyingResults", [])]
+        pages = paginate(entries, f"⏱️ Qualifying: {race.get('raceName')}", F1_RED, per_page=6)
+        for p in pages: p.description = f"**{race['Circuit'].get('circuitName')}**\n" + "—"*15 + "\n\n" + p.description
+        await interaction.followup.send(embed=pages[0], view=PaginatedEmbed(pages, interaction.user.id))
 
-            try:
-                race_dt = datetime.fromisoformat(
-                    f"{race['date']}T{race.get('time','00:00:00Z')}".replace("Z", "+00:00")
-                )
-                done = race_dt < now
-            except Exception:
-                done = False
+    async def _show_race_results(self, interaction, race):
+        results = race.get("Results", [])
+        entries = [f"{POSITION_MEDALS.get(int(r['position']), f'`{int(r['position']):02d}`')} **{r['Driver'].get('code')}** • {r['Constructor'].get('name')}\n└ `+{r.get('points')} pts` • {r.get('status')}\n" for r in results]
+        pages = paginate(entries, f"🏁 Race Results: {race.get('raceName')}", F1_RED, per_page=6)
+        for p in pages: p.description = f"**{race['Circuit'].get('circuitName')}**\n" + "—"*15 + "\n\n" + p.description
+        fl = extract_fastest_lap(results)
+        if fl: pages[0].insert_field_at(0, name="⚡ Fastest Lap", value=fl, inline=False)
+        await interaction.followup.send(embed=pages[0], view=PaginatedEmbed(pages, interaction.user.id))
 
-            status = "✅" if done else "🔜"
-            entries.append(f"{status} **R{round_no}** {time_str} — {name} 🇫🇷\n┗ {country}")
+    async def _constructors(self, interaction, session):
+        data = await jolpica_get(session, "/current/constructorStandings")
+        standings = data.get("MRData", {}).get("StandingsTable", {}).get("StandingsLists", [{}])[0].get("ConstructorStandings", [])
+        entries = [f"{POSITION_MEDALS.get(int(s['position']), f'`{int(s['position']):02d}`')} **{s['Constructor']['name']}**\n🏆 `{s['points']} pts` — {s['wins']} wins\n" for s in standings]
+        pages = paginate(entries, "🏗️ Constructor Championship", F1_RED, per_page=8)
+        await interaction.followup.send(embed=pages[0], view=PaginatedEmbed(pages, interaction.user.id))
 
-        if not entries:
-            await interaction.followup.send("❌ No schedule found.", ephemeral=True)
-            return
-
-        pages = paginate(entries, "📅 F1 2026 — Full Season Schedule", F1_RED, per_page=8)
-        view = PaginatedEmbed(pages, interaction.user.id)
-        await interaction.followup.send(embed=pages[0], view=view)
-
-
-async def setup(bot):
-    await bot.add_cog(F1(bot))
+async def setup(bot): await bot.add_cog(F1(bot))
