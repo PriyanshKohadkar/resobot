@@ -22,7 +22,7 @@ async def on_ready():
     await bot.tree.sync()
     await bot.change_presence(
         status=discord.Status.do_not_disturb,
-        activity=discord.Game("Recommending Peak Movies🔥")
+        activity=discord.Game("The Art Of Vibe-Coding⚡")
     )
     print(f"Logged in as {bot.user}")
     print("✅ Slash commands synced")
