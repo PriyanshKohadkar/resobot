@@ -39,6 +39,8 @@ async def main():
         
         await bot.load_extension("ipl")
         await bot.load_extension("f1")
+        await bot.load_extension("nasa_space_cog")
+        await bot.load_extension("earth_observation_cog")
         await bot.start(TOKEN)
 
 @bot.event
