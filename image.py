@@ -1,44 +1,51 @@
 import io
-import aiohttp
 import discord
 from discord.ext import commands
+from google import genai
+from google.genai import types
 import os
 
-class HFImage(commands.Cog):
+class GeminiImage(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.session = aiohttp.ClientSession()
-        # You choose which model repo to hit
-        self.model_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
-        self.headers = {"Authorization": f"Bearer {os.getenv('HF_TOKEN')}"}
+        # Make sure GEMINI_API_KEY is in your local .env file
+        self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-    def cog_unload(self):
-        self.bot.loop.create_task(self.session.close())
-
-    @commands.hybrid_command(name="sdgenerate", description="Generate an image using Stable Diffusion XL.")
-    async def sdgenerate(self, ctx: commands.Context, *, prompt: str):
+    @commands.hybrid_command(name="generate", description="Generate high-quality images via Gemini.")
+    async def generate(self, ctx: commands.Context, *, prompt: str):
         await ctx.defer()
         
-        payload = {"inputs": prompt}
-        
         try:
-            async with self.session.post(self.model_url, headers=self.headers, json=payload) as response:
-                if response.status == 200:
-                    image_bytes = await response.read()
-                    file_data = io.BytesIO(image_bytes)
-                    discord_file = discord.File(file_data, filename="sdxl_output.png")
-                    
-                    embed = discord.Embed(title="🚀 SDXL Generation", description=f"**Prompt:** {prompt}", color=0x2ecc71)
-                    embed.set_image(url="attachment://sdxl_output.png")
-                    
-                    await ctx.send(embed=embed, file=discord_file)
-                elif response.status == 503:
-                    await ctx.send("⏳ The model is currently loading up on Hugging Face. Please try again in a few seconds!")
-                else:
-                    await ctx.send(f"❌ Failed to generate (Status: {response.status}).")
+            # Call the model asynchronously inside an executor so it doesn't block the bot loop
+            result = await self.bot.loop.run_in_executor(
+                None, 
+                lambda: self.client.models.generate_images(
+                    model='gemini-2.5-flash-image',
+                    prompt=prompt,
+                    config=types.GenerateImagesConfig(
+                        number_of_images=1,
+                        output_mime_type="image/png",
+                        aspect_ratio="1:1"
+                    )
+                )
+            )
+            
+            # Extract raw image bytes from response
+            generated_image = result.generated_images[0]
+            image_bytes = generated_image.image.image_bytes
+            
+            # Send file directly via BytesIO
+            file_data = io.BytesIO(image_bytes)
+            discord_file = discord.File(file_data, filename="gemini_output.png")
+            
+            embed = discord.Embed(title="🎨 Gemini Image Generation", description=f"**Prompt:** {prompt}", color=0x3498db)
+            embed.set_image(url="attachment://gemini_output.png")
+            
+            await ctx.send(embed=embed, file=discord_file)
+            
         except Exception as e:
-            print(f"Hugging Face Error: {e}")
-            await ctx.send("⚠️ An error occurred contacting Hugging Face.")
+            print(f"Gemini Image Error: {e}")
+            await ctx.send("❌ Error generating image with Gemini. Check your limits or prompt.")
 
 async def setup(bot):
-    await bot.add_cog(HFImage(bot))
+    await bot.add_cog(GeminiImage(bot))
