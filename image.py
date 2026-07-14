@@ -1,6 +1,5 @@
 import io
 import os
-import base64
 import discord
 from discord.ext import commands
 from google import genai
@@ -9,40 +8,44 @@ from google.genai import types
 class GeminiImage(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Automatically detects the working GEMINI_API_KEY from your environment
+        # Instantiates the client natively (uses your working GEMINI_API_KEY env)
         self.client = genai.Client()
 
-    @commands.hybrid_command(name="generate", description="Generate images using Gemini 3.1 Flash Image.")
+    @commands.hybrid_command(name="generate", description="Generate high-quality images via Gemini 3.1.")
     async def generate(self, ctx: commands.Context, *, prompt: str):
-        """Generates an image using the official Google GenAI Interactions setup."""
+        """Generates an image using the official response_modalities framework."""
         await ctx.defer()
         
         try:
-            # We wrap the blocking API generation call inside an executor
-            interaction = await self.bot.loop.run_in_executor(
-                None,
-                lambda: self.client.models.create(
+            # We run the blocking client call in an executor so your bot doesn't hang
+            response = await self.bot.loop.run_in_executor(
+                None, 
+                lambda: self.client.models.generate_content(
                     model='gemini-3.1-flash-image',
-                    input=f"Create a picture of: {prompt}",
+                    contents=prompt,
                     config=types.GenerateContentConfig(
+                        response_modalities=["IMAGE"],
                         image_config=types.ImageConfig(
-                            image_size='1K'  # 1K is standard 1024x1024 output
+                            aspect_ratio="1:1" # Renders a standard square block
                         )
                     )
                 )
             )
             
-            # Pull the image block safely from the convenience output_image property
-            if interaction.output_image and interaction.output_image.data:
-                # The SDK packs the data in base64 string format inside this property
-                raw_base64 = interaction.output_image.data
-                image_bytes = base64.b64decode(raw_base64)
-                
-                # Turn bytes into a streamable Discord file object
+            # Find and parse the binary image block out of the response data parts
+            image_bytes = None
+            if response.candidates and response.candidates[0].content.parts:
+                for part in response.candidates[0].content.parts:
+                    if part.inline_data and part.inline_data.data:
+                        # The new SDK provides the unencoded image bytes here directly
+                        image_bytes = part.inline_data.data
+                        break
+            
+            if image_bytes:
+                # Pipe bytes straight into a streaming object for Discord
                 file_data = io.BytesIO(image_bytes)
                 discord_file = discord.File(file_data, filename="gemini_output.png")
                 
-                # Build your response Embed
                 embed = discord.Embed(
                     title="🎨 Gemini Image Generation", 
                     description=f"**Prompt:** {prompt}", 
@@ -53,11 +56,11 @@ class GeminiImage(commands.Cog):
                 
                 await ctx.send(embed=embed, file=discord_file)
             else:
-                await ctx.send("❌ Google AI did not return a valid image block for this prompt.")
+                await ctx.send("❌ No image data was returned. Your prompt might have triggered a safety filter.")
                 
         except Exception as e:
-            print(f"Gemini Gen AI Error: {e}")
-            await ctx.send("❌ Error generating image. Check your prompt syntax or API usage limits.")
+            print(f"Gemini Gen AI Image Cog Error: {e}")
+            await ctx.send("❌ Failed to process image request. Double-check your daily image model quota.")
 
 async def setup(bot):
     await bot.add_cog(GeminiImage(bot))
