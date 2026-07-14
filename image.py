@@ -20,7 +20,7 @@ class GeminiImage(commands.Cog):
             result = await self.bot.loop.run_in_executor(
                 None, 
                 lambda: self.client.models.generate_images(
-                    model='gemini-2.5-flash-image',
+                    model='gemini-2.5-flash-image-lite',
                     prompt=prompt,
                     config=types.GenerateImagesConfig(
                         number_of_images=1,
