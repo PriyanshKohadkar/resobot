@@ -11,7 +11,7 @@ class GeminiImage(commands.Cog):
         # Make sure GEMINI_API_KEY is in your local .env file
         self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-    @commands.hybrid_command(name="generate", description="Generate high-quality images via Gemini.")
+    @commands.hybrid_command(name="gen", description="Generate high-quality images via Gemini.")
     async def generate(self, ctx: commands.Context, *, prompt: str):
         await ctx.defer()
         
