@@ -36,7 +36,7 @@ async def main():
         await bot.load_extension("intel")
         await bot.load_extension("gif")
         await bot.load_extension("freaky")
-        
+        await bot.load_extension("image")
         await bot.load_extension("ipl")
         await bot.load_extension("f1")
         await bot.load_extension("nasa_space_cog")
