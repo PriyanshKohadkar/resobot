@@ -259,7 +259,7 @@ Do not explain. Do not add any extra text."""
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=[{"role": "user", "content": detector_prompt}],
             timeout=10.0
         )
